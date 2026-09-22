@@ -50,6 +50,12 @@ interface HookEntry {
   [key: string]: unknown;
 }
 
+interface HookGroup {
+  matcher: string;
+  hooks: HookEntry[];
+  [key: string]: unknown;
+}
+
 interface ClaudeSettings {
   hooks?: Record<string, unknown[]>;
   env?: Record<string, string>;
@@ -80,12 +86,20 @@ export interface RemoveClaudeCodeAnalyticsResult {
 }
 
 function isCodemieEntry(entry: unknown): boolean {
-  return (
-    typeof entry === 'object' &&
-    entry !== null &&
-    typeof (entry as HookEntry).command === 'string' &&
-    (entry as HookEntry).command.includes(CODEMIE_COMMAND_MARKER)
-  );
+  if (typeof entry !== 'object' || entry === null) return false;
+  const obj = entry as Record<string, unknown>;
+  // Current grouped format: { matcher, hooks: [{type, command}] }
+  if (Array.isArray(obj.hooks)) {
+    return (obj.hooks as unknown[]).some(
+      (h) =>
+        typeof h === 'object' &&
+        h !== null &&
+        typeof (h as HookEntry).command === 'string' &&
+        (h as HookEntry).command.includes(CODEMIE_COMMAND_MARKER)
+    );
+  }
+  // Legacy flat format: { type, command }
+  return typeof obj.command === 'string' && obj.command.includes(CODEMIE_COMMAND_MARKER);
 }
 
 async function readSettingsFile(settingsPath: string): Promise<ClaudeSettings> {
@@ -188,9 +202,9 @@ export async function writeClaudeCodeAnalyticsConfig(
   for (const eventName of HOOK_EVENTS) {
     const existingEntries: unknown[] = Array.isArray(hooks[eventName]) ? (hooks[eventName] as unknown[]) : [];
     const foreignEntries = existingEntries.filter((e) => !isCodemieEntry(e));
-    const codemieEntry: HookEntry = {
-      type: 'command',
-      command: 'codemie hook --agent claude-code --analytics',
+    const codemieEntry: HookGroup = {
+      matcher: '',
+      hooks: [{ type: 'command', command: 'codemie hook --agent claude-code --analytics' }],
     };
     hooks[eventName] = [...foreignEntries, codemieEntry];
   }
