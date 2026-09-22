@@ -122,6 +122,11 @@ export async function forwardSession(
   const status = await readStatusFile(sessionId);
   if (!status) return;
 
+  // True once a successfully forwarded batch contains a SessionEnd event.
+  // OTEL data and the final forwarded=true marker are deferred until then
+  // so that all hook events produced during the session reach the backend.
+  let sessionEnded = false;
+
   // Resolve syncApiUrl from daemon state for the backend base URL
   const { readState } = await import('../../../../../../cli/commands/proxy/daemon-manager.js');
   const state = await readState();
@@ -232,6 +237,19 @@ export async function forwardSession(
                 await writeStatusFile(sessionId, s);
               }
             });
+            // Detect SessionEnd among the successfully forwarded lines
+            sessionEnded = lines.some((line) => {
+              try {
+                const wrapper = JSON.parse(line) as Record<string, unknown>;
+                const rawField = wrapper['raw'];
+                const hookEvent: Record<string, unknown> = typeof rawField === 'string'
+                  ? (JSON.parse(rawField) as Record<string, unknown>)
+                  : (rawField as Record<string, unknown> ?? wrapper);
+                return String(hookEvent['hook_event_name'] ?? '') === 'SessionEnd';
+              } catch {
+                return false;
+              }
+            });
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -243,38 +261,70 @@ export async function forwardSession(
   }
 
   if (hooksOnly) {
-    // Mark forwarded after hooks-only forward
-    await withSessionLock(sessionId, async () => {
-      const s = await readStatusFile(sessionId);
-      if (s) {
-        s.forwarded = true;
-        await writeStatusFile(sessionId, s);
-      }
-    });
+    // Only mark the session done once SessionEnd has been forwarded; until
+    // then keep the cursor advancing on subsequent ticks.
+    if (sessionEnded) {
+      await withSessionLock(sessionId, async () => {
+        const s = await readStatusFile(sessionId);
+        if (s) {
+          s.forwarded = true;
+          await writeStatusFile(sessionId, s);
+        }
+      });
+    }
     return;
   }
 
-  // Forward OTLP bins
-  const otlpSignals: Array<{ signal: 'otel_logs' | 'otel_metrics' | 'otel_traces'; endpoint: string; flag: keyof SessionStatus }> = [
-    { signal: 'otel_logs', endpoint: CODEMIE_ENDPOINTS.CLI_ANALYTICS_LOGS, flag: 'otelLogsWritten' },
-    { signal: 'otel_metrics', endpoint: CODEMIE_ENDPOINTS.CLI_ANALYTICS_METRICS, flag: 'otelMetricsWritten' },
-    { signal: 'otel_traces', endpoint: CODEMIE_ENDPOINTS.CLI_ANALYTICS_TRACES, flag: 'otelTracesWritten' },
+  // Forward OTLP bins — cursor-based so each tick only sends bytes appended
+  // since the previous tick, not the whole accumulated file.
+  const otlpSignals: Array<{
+    signal: 'otel_logs' | 'otel_metrics' | 'otel_traces';
+    endpoint: string;
+    writtenFlag: 'otelLogsWritten' | 'otelMetricsWritten' | 'otelTracesWritten';
+    getCursor: (s: SessionStatus) => number;
+    setCursor: (s: SessionStatus, v: number) => void;
+  }> = [
+    {
+      signal: 'otel_logs',
+      endpoint: CODEMIE_ENDPOINTS.CLI_ANALYTICS_LOGS,
+      writtenFlag: 'otelLogsWritten',
+      getCursor: (s) => s.otelLogsCursor ?? 0,
+      setCursor: (s, v) => { s.otelLogsCursor = v; },
+    },
+    {
+      signal: 'otel_metrics',
+      endpoint: CODEMIE_ENDPOINTS.CLI_ANALYTICS_METRICS,
+      writtenFlag: 'otelMetricsWritten',
+      getCursor: (s) => s.otelMetricsCursor ?? 0,
+      setCursor: (s, v) => { s.otelMetricsCursor = v; },
+    },
+    {
+      signal: 'otel_traces',
+      endpoint: CODEMIE_ENDPOINTS.CLI_ANALYTICS_TRACES,
+      writtenFlag: 'otelTracesWritten',
+      getCursor: (s) => s.otelTracesCursor ?? 0,
+      setCursor: (s, v) => { s.otelTracesCursor = v; },
+    },
   ];
 
-  for (const { signal, endpoint, flag } of otlpSignals) {
-    if (!status[flag]) continue;
+  for (const { signal, endpoint, writtenFlag, getCursor, setCursor } of otlpSignals) {
+    if (!status[writtenFlag]) continue;
     const binPath = sessionFile(sessionId, signal);
-    let binData: Buffer;
+    let fullBinData: Buffer;
     try {
-      binData = await readFile(binPath);
+      fullBinData = await readFile(binPath);
     } catch {
       continue;
     }
+    const otelCursor = getCursor(status);
+    const slice = fullBinData.subarray(otelCursor);
+    if (slice.length === 0) continue; // Nothing new since last tick
+
     const url = `${baseUrl}${endpoint}`;
     try {
-      let response = await postToBackend(url, binData, 'application/x-protobuf', credentials);
+      let response = await postToBackend(url, slice, 'application/x-protobuf', credentials);
       if (response.status === 401 || response.status === 403) {
-        response = await postToBackend(url, binData, 'application/x-protobuf', credentials);
+        response = await postToBackend(url, slice, 'application/x-protobuf', credentials);
         if (response.status === 401 || response.status === 403) {
           await withSessionLock(sessionId, async () => {
             const s = await readStatusFile(sessionId);
@@ -286,20 +336,31 @@ export async function forwardSession(
           return;
         }
       }
+      if (response.ok) {
+        await withSessionLock(sessionId, async () => {
+          const s = await readStatusFile(sessionId);
+          if (s) {
+            setCursor(s, otelCursor + slice.length);
+            await writeStatusFile(sessionId, s);
+          }
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.debug(`[claude-analytics-forwarder] ${signal} forward error`, ...sanitizeLogArgs({ sessionId, err: msg }));
     }
   }
 
-  // Mark forwarded
-  await withSessionLock(sessionId, async () => {
-    const s = await readStatusFile(sessionId);
-    if (s) {
-      s.forwarded = true;
-      await writeStatusFile(sessionId, s);
-    }
-  });
+  // Mark the session done once SessionEnd has been forwarded in the hooks batch
+  if (sessionEnded) {
+    await withSessionLock(sessionId, async () => {
+      const s = await readStatusFile(sessionId);
+      if (s) {
+        s.forwarded = true;
+        await writeStatusFile(sessionId, s);
+      }
+    });
+  }
 }
 
 // Re-export helpers needed by tick-processor

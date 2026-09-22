@@ -12,6 +12,10 @@ export interface SessionStatus {
   authExpired?: boolean;
   /** Byte offset into hooks.ndjson, advanced after each successful forward */
   cursor?: number;
+  /** Byte offsets into each OTEL bin file, advanced after each successful forward */
+  otelLogsCursor?: number;
+  otelMetricsCursor?: number;
+  otelTracesCursor?: number;
 }
 
 export type GateDecision = 'send' | 'hooks-only-force' | 'wait' | 'noop';

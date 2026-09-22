@@ -37,6 +37,9 @@ function defaultStatus(): SessionStatus {
     otelTracesWritten: false,
     waitTicks: 0,
     cursor: 0,
+    otelLogsCursor: 0,
+    otelMetricsCursor: 0,
+    otelTracesCursor: 0,
   };
 }
 
