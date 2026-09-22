@@ -61,7 +61,7 @@ class ClaudeAnalyticsIngestInterceptor implements ProxyInterceptor {
       logger.debug('[claude-analytics-ingest] startup tick error', ...sanitizeLogArgs({ err: msg }));
     });
 
-    const sendInterval = Number(process.env['CODEMIE_CLAUDE_ANALYTICS_SEND_INTERVAL_MS'] ?? '5_000');
+    const sendInterval = Number(process.env['CODEMIE_CLAUDE_ANALYTICS_SEND_INTERVAL_MS'] ?? '5000');
     this.tickHandle = setInterval(() => {
       void this.tick().catch((err) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -130,13 +130,13 @@ class ClaudeAnalyticsIngestInterceptor implements ProxyInterceptor {
     }
 
     // Route: POST /v1/analytics/claude-code/otlp/logs|metrics|traces
-    if (method === 'POST' && url === '/v1/analytics/claude-code/otlp/logs') {
+    if (method === 'POST' && url === '/v1/analytics/claude-code/otlp/v1/logs') {
       return this.handleOtlp(ctx, res, 'otel_logs');
     }
-    if (method === 'POST' && url === '/v1/analytics/claude-code/otlp/metrics') {
+    if (method === 'POST' && url === '/v1/analytics/claude-code/otlp/v1/metrics') {
       return this.handleOtlp(ctx, res, 'otel_metrics');
     }
-    if (method === 'POST' && url === '/v1/analytics/claude-code/otlp/traces') {
+    if (method === 'POST' && url === '/v1/analytics/claude-code/otlp/v1/traces') {
       return this.handleOtlp(ctx, res, 'otel_traces');
     }
 

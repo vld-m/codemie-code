@@ -19,7 +19,7 @@ import { resolveProjectRoot } from '@/utils/project-root.js';
 import { readState } from '../daemon-manager.js';
 import { writeAtomically } from './vscode.js';
 
-const CODEMIE_COMMAND_MARKER = 'hook --agent claude-code --analytics';
+const CODEMIE_COMMAND_MARKER = 'hook --agent claude --analytics';
 const SETTINGS_BACKUP_SUFFIX = '.codemie-backup';
 
 const HOOK_EVENTS = [
@@ -204,7 +204,7 @@ export async function writeClaudeCodeAnalyticsConfig(
     const foreignEntries = existingEntries.filter((e) => !isCodemieEntry(e));
     const codemieEntry: HookGroup = {
       matcher: '',
-      hooks: [{ type: 'command', command: 'codemie hook --agent claude-code --analytics' }],
+      hooks: [{ type: 'command', command: 'codemie hook --agent claude --analytics' }],
     };
     hooks[eventName] = [...foreignEntries, codemieEntry];
   }

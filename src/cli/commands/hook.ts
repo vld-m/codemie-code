@@ -1675,7 +1675,6 @@ export function createHookCommand(): Command {
 
         if (opts.analytics) {
           await forwardHookEventToSpool(input, agentName);
-          writeAgentStdoutResponse(agentName, event.hook_event_name);
           await logger.close();
           process.exitCode = 0;
           return;

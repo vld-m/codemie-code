@@ -154,10 +154,21 @@ export async function forwardSession(
       const mapped: string[] = [];
       for (const line of lines) {
         try {
-          const raw = JSON.parse(line) as Record<string, unknown>;
-          const hookName = String(raw['hook_event_name'] ?? '');
-          const eventType = hookEventType(hookName, raw);
-          const cwd = String(raw['cwd'] ?? '');
+          const wrapper = JSON.parse(line) as Record<string, unknown>;
+          // Spool lines are stored as { agentName, raw: "<hook-json>", timestamp }.
+          // Parse the inner field to get hook_event_name, session_id, cwd, etc.
+          const rawField = wrapper['raw'];
+          let hookEvent: Record<string, unknown>;
+          try {
+            hookEvent = typeof rawField === 'string'
+              ? (JSON.parse(rawField) as Record<string, unknown>)
+              : (rawField as Record<string, unknown> ?? wrapper);
+          } catch {
+            hookEvent = wrapper;
+          }
+          const hookName = String(hookEvent['hook_event_name'] ?? '');
+          const eventType = hookEventType(hookName, hookEvent);
+          const cwd = String(hookEvent['cwd'] ?? '');
 
           if (cwd && !gitCache.branch) {
             try {
@@ -172,15 +183,17 @@ export async function forwardSession(
           }
 
           const mappedEvent = {
+            ...hookEvent,
             type: eventType,
-            session_id: String(raw['session_id'] ?? ''),
+            session_id: String(hookEvent['session_id'] ?? ''),
             timestamp: Date.now(),
             user_email: userEmail,
+            developer_name: userEmail,
             git_branch: gitCache.branch ?? '',
             repo_remote: gitCache.remote ?? '',
             codemie_project_name: projectName,
             cwd,
-            raw,
+            raw: hookEvent,
           };
           mapped.push(JSON.stringify(mappedEvent));
         } catch {

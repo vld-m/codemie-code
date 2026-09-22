@@ -663,7 +663,7 @@ async function runClaudeCode(options: ClaudeCodeRunOptions): Promise<TargetResul
   try {
     const result = await writeClaudeCodeAnalyticsConfig({ force: options.force });
     console.log(chalk.green(`\u2713 Claude Code analytics configured`));
-    console.log(chalk.dim(`  ${result.hookEvents} event(s) wired to codemie hook --agent claude-code --analytics`));
+    console.log(chalk.dim(`  ${result.hookEvents} event(s) wired to codemie hook --agent claude --analytics`));
     console.log(chalk.dim(`  ${result.envVars} OTel env var(s) set in .claude/settings.json`));
     if (result.backupPath) {
       console.log(chalk.dim(`  Backup written: ${result.backupPath}`));
