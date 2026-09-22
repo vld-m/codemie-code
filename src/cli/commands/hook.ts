@@ -6,6 +6,7 @@ import { SESSION_ORIGIN, SESSION_ORIGIN_ENV_KEY } from '@/agents/core/session/ty
 import type { BaseHookEvent, HookTransformer, MCPConfigSummary, ExtensionsScanSummary } from '@/agents/core/types.js';
 import type { ProcessingContext } from '@/agents/core/session/BaseProcessor.js';
 import { forwardOtlpEvent } from '@/agents/plugins/cursor-ide/cursor-ide.otlp-forwarder.js';
+import { forwardHookEventToSpool } from '@/agents/plugins/claude/claude-code-analytics.hook-forwarder.js';
 
 /**
  * Hook event handlers for agent lifecycle events
@@ -1597,7 +1598,8 @@ export function createHookCommand(): Command {
   return new Command('hook')
     .description('Unified hook event handler (called by agent plugins)')
     .option('--agent <name>', 'Agent name for hook attribution (overrides CODEMIE_AGENT)')
-    .action(async (opts: { agent?: string }) => {
+    .option('--analytics', 'Forward hook events to the analytics spool (analytics path)')
+    .action(async (opts: { agent?: string; analytics?: boolean }) => {
       const hookStartTime = Date.now();
       let event: BaseHookEvent | null = null;
       // Hoisted so the catch block can also resolve declarative agent gating
@@ -1665,6 +1667,14 @@ export function createHookCommand(): Command {
         // the shared transform/validate/route pipeline and its legacy analytics.
         if (agentOtlpIngestion(agentName)) {
           await forwardOtlpEvent(input, agentName);
+          writeAgentStdoutResponse(agentName, event.hook_event_name);
+          await logger.close();
+          process.exitCode = 0;
+          return;
+        }
+
+        if (opts.analytics) {
+          await forwardHookEventToSpool(input, agentName);
           writeAgentStdoutResponse(agentName, event.hook_event_name);
           await logger.close();
           process.exitCode = 0;

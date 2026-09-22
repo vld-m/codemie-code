@@ -11,8 +11,10 @@ import { sanitizeLogArgs } from '@/utils/security.js';
 
 import { removeCodexDesktopConfig } from './connectors/codex-desktop.js';
 import { removeCursorIdeHooksConfig } from './connectors/cursor-ide.js';
+import { removeClaudeCodeAnalyticsConfig } from './connectors/claude-code-analytics.js';
 
 export interface DisconnectTargets {
+  claudeCode?: boolean;
   codexDesktop?: boolean;
   cursorIde?: boolean;
 }
@@ -26,6 +28,7 @@ const DISCONNECT_TARGET_LIST = [
   '',
   '  --codex-desktop        Codex desktop app (removes the CodeMie block from ~/.codex/config.toml)',
   '  --cursor-ide           Cursor IDE (removes codemie-authored entries from .cursor/hooks.json)',
+  '  --claude-code          Claude Code (removes hook/env entries from <projectRoot>/.claude/settings.json)',
   '',
   'Example:',
   '  codemie proxy disconnect --codex-desktop',
@@ -78,8 +81,30 @@ async function disconnectCursorIde(): Promise<void> {
   }
 }
 
+async function disconnectClaudeCode(): Promise<void> {
+  try {
+    const result = await removeClaudeCodeAnalyticsConfig();
+
+    if (!result.removed) {
+      console.log(chalk.dim('Claude Code Analytics: nothing to disconnect.'));
+      return;
+    }
+
+    console.log(chalk.green(`✓ Claude Code Analytics disconnected (${result.path})`));
+    if (result.usedBackup) {
+      console.log(chalk.yellow(
+        "⚠ Restored the pre-connect backup because CodeMie's entries were the file's only content."
+      ));
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`✗ Claude Code Analytics - ${message}`));
+    process.exitCode = 1;
+  }
+}
+
 export async function disconnectTargets(opts: DisconnectOptions): Promise<void> {
-  if (!opts.targets.codexDesktop && !opts.targets.cursorIde) {
+  if (!opts.targets.codexDesktop && !opts.targets.cursorIde && !opts.targets.claudeCode) {
     console.log(DISCONNECT_TARGET_LIST);
     return;
   }
@@ -90,5 +115,9 @@ export async function disconnectTargets(opts: DisconnectOptions): Promise<void> 
 
   if (opts.targets.cursorIde) {
     await disconnectCursorIde();
+  }
+
+  if (opts.targets.claudeCode) {
+    await disconnectClaudeCode();
   }
 }

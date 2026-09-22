@@ -48,6 +48,7 @@ import {
   writeCodexDesktopConfig,
 } from './connectors/codex-desktop.js';
 import { writeCursorIdeHooksConfig } from './connectors/cursor-ide.js';
+import { writeClaudeCodeAnalyticsConfig } from './connectors/claude-code-analytics.js';
 
 export const DEFAULT_DAEMON_PORT = 4001;
 
@@ -56,6 +57,7 @@ export const DEFAULT_DAEMON_PORT = 4001;
 /** The orthogonal targets a single `connect` invocation may configure. */
 export interface ConnectTargets {
   claudeDesktop?: boolean;
+  claudeCode?: boolean;
   vscode?: boolean;
   vscodeClaudeCode?: boolean;
   codexDesktop?: boolean;
@@ -76,7 +78,7 @@ export interface ConnectOptions {
 }
 
 /** Effective client type used by `daemonMatchesRequest`. */
-export type EffectiveClientType = 'claude-desktop' | 'vscode-byok' | 'codex-desktop' | 'cursor-ide';
+export type EffectiveClientType = 'claude-desktop' | 'claude-code' | 'vscode-byok' | 'codex-desktop' | 'cursor-ide';
 
 /**
  * The daemon identity for a target set. `spawnOptions` is byte-identical to the
@@ -91,7 +93,8 @@ export interface DaemonIdentity {
     | { telemetryMode: 'claude-desktop' }
     | { clientType: 'vscode-byok' }
     | { clientType: 'codex-desktop' }
-    | { clientType: 'cursor-ide' };
+    | { clientType: 'cursor-ide' }
+    | { clientType: 'claude-code' };
 }
 
 /**
@@ -103,6 +106,9 @@ export interface DaemonIdentity {
 export function deriveDaemonIdentity(targets: ConnectTargets): DaemonIdentity {
   if (targets.claudeDesktop || targets.vscodeClaudeCode) {
     return { clientType: 'claude-desktop', spawnOptions: { telemetryMode: 'claude-desktop' } };
+  }
+  if (targets.claudeCode) {
+    return { clientType: 'claude-code', spawnOptions: { clientType: 'claude-code' } };
   }
   if (targets.codexDesktop) {
     return { clientType: 'codex-desktop', spawnOptions: { clientType: 'codex-desktop' } };
@@ -280,6 +286,7 @@ const TARGET_LIST = [
   'Select at least one target to configure:',
   '',
   '  --claude-desktop       Claude Desktop app (MCP servers)',
+  '  --claude-code [--analytics]   Claude Code (analytics hooks + OTel settings)',
   '  --vscode               VS Code Copilot Chat models (BYOK)',
   '  --vscode-claude-code   VS Code Claude Code extension',
   '  --codex-desktop        Codex desktop app (writes ~/.codex/config.toml)',
@@ -291,12 +298,13 @@ const TARGET_LIST = [
   '  codemie proxy connect --vscode --vscode-claude-code',
   '  codemie proxy connect --claude-desktop --vscode --insiders',
   '  codemie proxy connect --cursor-ide --analytics',
+  '  codemie proxy connect --claude-code --analytics',
   '',
   "Run 'codemie proxy connect --help' for all options.",
 ].join('\n');
 
 function hasAnyTarget(t: ConnectTargets): boolean {
-  return Boolean(t.claudeDesktop || t.vscode || t.vscodeClaudeCode || t.codexDesktop || t.cursorIde);
+  return Boolean(t.claudeDesktop || t.claudeCode || t.vscode || t.vscodeClaudeCode || t.codexDesktop || t.cursorIde);
 }
 
 /** A human label and the base command to echo in remediation messages. */
@@ -304,6 +312,7 @@ function describeTargets(t: ConnectTargets): { label: string; commandExample: st
   const flags: string[] = [];
   const labels: string[] = [];
   if (t.claudeDesktop) { flags.push('--claude-desktop'); labels.push('Claude Desktop'); }
+  if (t.claudeCode) { flags.push('--claude-code'); labels.push('Claude Code'); }
   if (t.vscode) { flags.push('--vscode'); labels.push('VS Code'); }
   if (t.vscodeClaudeCode) { flags.push('--vscode-claude-code'); labels.push('VS Code Claude Code'); }
   if (t.codexDesktop) { flags.push('--codex-desktop'); labels.push('Codex Desktop'); }
@@ -642,8 +651,32 @@ async function runCursorIde(options: CursorIdeRunOptions): Promise<TargetResult>
   }
 }
 
-/** Test seam \u2014 the runner is otherwise only reachable through `connectTargets`. */
+/** Test seam - the runner is otherwise only reachable through `connectTargets`. */
 export const runCursorIdeForTest = runCursorIde;
+
+interface ClaudeCodeRunOptions {
+  force?: boolean;
+}
+
+async function runClaudeCode(options: ClaudeCodeRunOptions): Promise<TargetResult> {
+  const label = 'Claude Code Analytics';
+  try {
+    const result = await writeClaudeCodeAnalyticsConfig({ force: options.force });
+    console.log(chalk.green(`\u2713 Claude Code analytics configured`));
+    console.log(chalk.dim(`  ${result.hookEvents} event(s) wired to codemie hook --agent claude-code --analytics`));
+    console.log(chalk.dim(`  ${result.envVars} OTel env var(s) set in .claude/settings.json`));
+    if (result.backupPath) {
+      console.log(chalk.dim(`  Backup written: ${result.backupPath}`));
+    }
+    console.log(chalk.yellow('  Restart Claude Code to apply changes.'));
+    return { label, ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('[proxy] Failed to configure Claude Code analytics', ...sanitizeLogArgs({ error: message }));
+    console.log(chalk.yellow(`  Could not configure Claude Code analytics: ${message}`));
+    return { label, ok: false, error: message };
+  }
+}
 
 export async function connectTargets(opts: ConnectOptions): Promise<void> {
   const { targets } = opts;
@@ -652,9 +685,9 @@ export async function connectTargets(opts: ConnectOptions): Promise<void> {
   // --analytics carries no target flag of its own, so it must be checked
   // ahead of hasAnyTarget — otherwise "--analytics" alone (or with unrelated
   // flags but no target) silently falls through to the generic target list
-  // instead of explaining that --analytics only applies to --cursor-ide.
-  if (analytics && !targets.cursorIde) {
-    console.log(chalk.yellow('Note: --analytics has no effect without --cursor-ide.'));
+  // instead of explaining that --analytics only applies to --cursor-ide / --claude-code.
+  if (analytics && !targets.cursorIde && !targets.claudeCode) {
+    console.log(chalk.yellow('Note: --analytics has no effect without --cursor-ide or --claude-code.'));
     return;
   }
 
@@ -667,6 +700,11 @@ export async function connectTargets(opts: ConnectOptions): Promise<void> {
     console.log(chalk.yellow(
       'Note: --cursor-ide requires --analytics. Re-run with --cursor-ide --analytics.'
     ));
+    return;
+  }
+
+  if (targets.claudeCode && !analytics) {
+    console.log(chalk.yellow('Note: --claude-code requires --analytics. Re-run with --claude-code --analytics.'));
     return;
   }
 
@@ -767,6 +805,7 @@ export async function connectTargets(opts: ConnectOptions): Promise<void> {
     }));
   }
   if (targets.cursorIde) results.push(await runCursorIde({ force: Boolean(opts.force) }));
+  if (targets.claudeCode) results.push(await runClaudeCode({ force: Boolean(opts.force) }));
 
   const anyFailed = results.some((r) => !r.ok);
   const allFailed = results.every((r) => !r.ok);

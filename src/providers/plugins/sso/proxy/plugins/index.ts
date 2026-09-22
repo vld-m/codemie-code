@@ -22,6 +22,7 @@ import { VsCodeRequestNormalizerPlugin } from './vscode-request-normalizer.plugi
 import { LoggingPlugin } from './logging.plugin.js';
 import { SSOSessionSyncPlugin } from './sso.session-sync.plugin.js';
 import { OtlpIngestPlugin } from './otlp-ingest.plugin.js';
+import { ClaudeAnalyticsIngestPlugin } from './claude-analytics-ingest.plugin.js';
 
 /**
  * Register core plugins
@@ -47,6 +48,7 @@ export function registerCorePlugins(): void {
   registry.register(new LoggingPlugin()); // Always enabled - logs to log files at INFO level
   registry.register(new SSOSessionSyncPlugin()); // Priority 100 - syncs sessions via multiple processors
   registry.register(new OtlpIngestPlugin()); // Priority 10 - OTLP hook event ingestion
+  registry.register(new ClaudeAnalyticsIngestPlugin()); // Priority 10 - Claude Code analytics ingestion
 }
 
 // Auto-register on import
@@ -71,5 +73,6 @@ export {
 };
 export { SSOSessionSyncPlugin } from './sso.session-sync.plugin.js';
 export { OtlpIngestPlugin } from './otlp-ingest.plugin.js';
+export { ClaudeAnalyticsIngestPlugin } from './claude-analytics-ingest.plugin.js';
 export { getPluginRegistry, resetPluginRegistry } from './registry.js';
 export * from './types.js';

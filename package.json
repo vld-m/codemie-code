@@ -54,7 +54,13 @@
     "ci:full": "npm run commitlint:last && npm run ci",
     "prepare": "husky",
     "prepublishOnly": "npm run build",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "poc:logs:local": "tail -f ~/.codemie/logs/hook-events.jsonl",
+    "poc:logs:local:remove": "rm -f ~/.codemie/logs/hook-events.jsonl",
+    "poc:logs:docker": "docker exec codemie-clickhouse-1 clickhouse-client --user otel --password otel --query \"SELECT Timestamp, LogAttributes['event_type'] AS event_type, LogAttributes['session_id'] AS session_id, LogAttributes['user.email'] AS email FROM codemie_analytics.coding_agent_logs WHERE ServiceName = 'cursor-agent' ORDER BY Timestamp DESC LIMIT 20\"",
+    "poc:proxy:start": "bin/codemie.js proxy connect --cursor-ide --analytics",
+    "poc:proxy:state": "cat ~/.codemie/proxy-daemon.json",
+    "poc:proxy:stop": "bin/codemie.js proxy stop && bin/codemie.js proxy disconnect --cursor-ide"
   },
   "lint-staged": {
     "*.ts": [
