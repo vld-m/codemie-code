@@ -75,6 +75,8 @@ export interface ConnectOptions {
   model?: string;
   /** Gate for the cursor-ide target — analytics-only hook ingestion. */
   analytics?: boolean;
+  /** Settings scope for --claude-code: writes to ~/.claude (user) or .claude (project). Defaults to "user". */
+  scope?: "user" | "project";
 }
 
 /** Effective client type used by `daemonMatchesRequest`. */
@@ -656,12 +658,13 @@ export const runCursorIdeForTest = runCursorIde;
 
 interface ClaudeCodeRunOptions {
   force?: boolean;
+  scope?: "user" | "project";
 }
 
 async function runClaudeCode(options: ClaudeCodeRunOptions): Promise<TargetResult> {
   const label = 'Claude Code Analytics';
   try {
-    const result = await writeClaudeCodeAnalyticsConfig({ force: options.force });
+    const result = await writeClaudeCodeAnalyticsConfig({ force: options.force , scope:options.scope });
     console.log(chalk.green(`\u2713 Claude Code analytics configured`));
     console.log(chalk.dim(`  ${result.hookEvents} event(s) wired to codemie hook --agent claude --analytics`));
     console.log(chalk.dim(`  ${result.envVars} OTel env var(s) set in .claude/settings.json`));
@@ -805,7 +808,7 @@ export async function connectTargets(opts: ConnectOptions): Promise<void> {
     }));
   }
   if (targets.cursorIde) results.push(await runCursorIde({ force: Boolean(opts.force) }));
-  if (targets.claudeCode) results.push(await runClaudeCode({ force: Boolean(opts.force) }));
+  if (targets.claudeCode) results.push(await runClaudeCode({ force: Boolean(opts.force), scope: opts.scope }));
 
   const anyFailed = results.some((r) => !r.ok);
   const allFailed = results.every((r) => !r.ok);

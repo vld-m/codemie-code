@@ -16,6 +16,7 @@ import { ConfigurationError } from '@/utils/errors.js';
 import { logger } from '@/utils/logger.js';
 import { sanitizeLogArgs } from '@/utils/security.js';
 import { resolveProjectRoot } from '@/utils/project-root.js';
+import { resolveHomeDir } from '@/utils/paths.js';
 import { readState } from '../daemon-manager.js';
 import { writeAtomically } from './vscode.js';
 
@@ -62,12 +63,12 @@ interface ClaudeSettings {
   [key: string]: unknown;
 }
 
-export interface WriteClaudeCodeAnalyticsOptions {
-  projectRoot?: string;
+interface WriteClaudeCodeAnalyticsOptions {
   force?: boolean;
+  scope?: "user" | "project";
 }
 
-export interface WriteClaudeCodeAnalyticsResult {
+interface WriteClaudeCodeAnalyticsResult {
   written: boolean;
   path: string;
   backupPath: string | null;
@@ -75,11 +76,11 @@ export interface WriteClaudeCodeAnalyticsResult {
   envVars: number;
 }
 
-export interface RemoveClaudeCodeAnalyticsOptions {
-  projectRoot?: string;
+interface RemoveClaudeCodeAnalyticsOptions {
+  scope?: 'user' | 'project';
 }
 
-export interface RemoveClaudeCodeAnalyticsResult {
+interface RemoveClaudeCodeAnalyticsResult {
   removed: boolean;
   usedBackup: boolean;
   path: string | null;
@@ -139,8 +140,10 @@ export async function writeClaudeCodeAnalyticsConfig(
     throw new ConfigurationError('No live proxy daemon. Run: codemie proxy start');
   }
 
+  const basePath = opts.scope === 'project' ? resolveProjectRoot() : resolveHomeDir();
+
   const settingsPath = join(
-    opts.projectRoot ?? resolveProjectRoot(),
+    basePath,
     '.claude',
     'settings.json'
   );
@@ -220,7 +223,7 @@ export async function writeClaudeCodeAnalyticsConfig(
 
   // Ensure .claude directory exists
   const { mkdir } = await import('node:fs/promises');
-  await mkdir(join(opts.projectRoot ?? resolveProjectRoot(), '.claude'), { recursive: true });
+  await mkdir(join(basePath, '.claude'), { recursive: true });
 
   await writeAtomically(settingsPath, JSON.stringify(merged, null, 2) + '\n');
 
@@ -245,11 +248,8 @@ export async function writeClaudeCodeAnalyticsConfig(
 export async function removeClaudeCodeAnalyticsConfig(
   opts: RemoveClaudeCodeAnalyticsOptions = {}
 ): Promise<RemoveClaudeCodeAnalyticsResult> {
-  const settingsPath = join(
-    opts.projectRoot ?? resolveProjectRoot(),
-    '.claude',
-    'settings.json'
-  );
+  const basePath = opts.scope === 'project' ? resolveProjectRoot() : resolveHomeDir();
+  const settingsPath = join(basePath, '.claude', 'settings.json');
 
   if (!existsSync(settingsPath)) {
     return { removed: false, usedBackup: false, path: null };

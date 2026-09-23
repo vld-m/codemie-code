@@ -31,18 +31,19 @@ interface ProxyStartOptions {
 }
 
 interface UnifiedConnectOptions {
+  analytics?: boolean;
   claudeCode?: boolean;
   claudeDesktop?: boolean;
-  vscode?: boolean;
-  vscodeClaudeCode?: boolean;
   codexDesktop?: boolean;
   cursorIde?: boolean;
-  analytics?: boolean;
-  profile?: string;
   force?: boolean;
-  verbose?: boolean;
   insiders?: boolean;
   model?: string;
+  profile?: string;
+  scope?: "user" | "project";
+  verbose?: boolean;
+  vscode?: boolean;
+  vscodeClaudeCode?: boolean;
 }
 
 interface AliasConnectOptions {
@@ -298,6 +299,7 @@ export function createProxyCommand(): Command {
     .option('--codex-desktop', 'Configure the Codex desktop app (writes ~/.codex/config.toml)')
     .option('--cursor-ide', 'Configure Cursor IDE — writes .cursor/hooks.json (requires --analytics)')
     .option('--analytics', 'Enable analytics-only hook ingestion (applies to --cursor-ide and --claude-code)')
+    .option('--scope <scope>', 'Settings scope for --claude-code: "user" (default) or "project"', 'user')
     .option('--model <slug>', 'Pin a specific model for --codex-desktop (default: best available)')
     .option('--profile <name>', 'Profile whose credentials to use')
     .option('--force', 'Stop any existing proxy and start a fresh one, even if it looks healthy')
@@ -319,6 +321,7 @@ export function createProxyCommand(): Command {
         verbose: Boolean(opts.verbose),
         model: opts.model,
         analytics: Boolean(opts.analytics),
+        scope: opts.scope,
       });
     });
 
@@ -328,13 +331,15 @@ export function createProxyCommand(): Command {
     .option('--claude-code', 'Remove CodeMie hook and env entries from .claude/settings.json')
     .option('--codex-desktop', 'Remove the CodeMie block from ~/.codex/config.toml')
     .option('--cursor-ide', 'Remove codemie-authored entries from .cursor/hooks.json')
-    .action(async (opts: { claudeCode?: boolean; codexDesktop?: boolean; cursorIde?: boolean }) => {
+    .option('--scope <scope>', 'Settings scope for --claude-code: "user" (default) or "project"', 'user')
+    .action(async (opts: { claudeCode?: boolean; codexDesktop?: boolean; cursorIde?: boolean; scope?: 'user' | 'project' }) => {
       await disconnectTargets({
         targets: {
           claudeCode: Boolean(opts.claudeCode),
           codexDesktop: Boolean(opts.codexDesktop),
           cursorIde: Boolean(opts.cursorIde),
         },
+        scope: opts.scope,
       });
     });
 

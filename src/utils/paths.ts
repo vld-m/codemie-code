@@ -316,7 +316,7 @@ export function isValidUuidFilename(filename: string, extension: string): boolea
  * resolveHomeDir('.gemini/auth.json')
  * // Returns: '/Users/john/.gemini/auth.json'
  */
-export function resolveHomeDir(relativePath: string): string {
+export function resolveHomeDir(relativePath: string=""): string {
   return path.join(homedir(), relativePath);
 }
 

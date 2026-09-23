@@ -21,6 +21,7 @@ export interface DisconnectTargets {
 
 export interface DisconnectOptions {
   targets: DisconnectTargets;
+  scope?: 'user' | 'project';
 }
 
 const DISCONNECT_TARGET_LIST = [
@@ -81,9 +82,9 @@ async function disconnectCursorIde(): Promise<void> {
   }
 }
 
-async function disconnectClaudeCode(): Promise<void> {
+async function disconnectClaudeCode(scope?: 'user' | 'project'): Promise<void> {
   try {
-    const result = await removeClaudeCodeAnalyticsConfig();
+    const result = await removeClaudeCodeAnalyticsConfig({ scope });
 
     if (!result.removed) {
       console.log(chalk.dim('Claude Code Analytics: nothing to disconnect.'));
@@ -118,6 +119,6 @@ export async function disconnectTargets(opts: DisconnectOptions): Promise<void> 
   }
 
   if (opts.targets.claudeCode) {
-    await disconnectClaudeCode();
+    await disconnectClaudeCode(opts.scope);
   }
 }
