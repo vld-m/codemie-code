@@ -198,6 +198,7 @@ export async function forwardSession(
             repo_remote: gitCache.remote ?? '',
             codemie_project_name: projectName,
             cwd,
+            prompt_body: String(hookEvent['prompt'] ?? ''),
             raw: hookEvent,
           };
           mapped.push(JSON.stringify(mappedEvent));
