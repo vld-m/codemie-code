@@ -43,6 +43,7 @@ const CODEMIE_ENV_KEYS = [
   'OTEL_LOGS_EXPORTER',
   'OTEL_METRICS_EXPORTER',
   'OTEL_TRACES_EXPORTER',
+  'OTEL_LOG_TOOL_DETAILS',
 ] as const;
 
 interface HookEntry {
@@ -151,7 +152,7 @@ export async function writeClaudeCodeAnalyticsConfig(
   const existing = await readSettingsFile(settingsPath);
 
   // Inline conflict-detection: check if env block already contains any of the
-  // 8 env keys with a different (non-codemie-authored) value.
+  // env keys with a different (non-codemie-authored) value.
   const codemieEnv: Record<string, string> = {
     CLAUDE_CODE_ENABLE_TELEMETRY: '1',
     CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: '1',
@@ -161,6 +162,7 @@ export async function writeClaudeCodeAnalyticsConfig(
     OTEL_LOGS_EXPORTER: 'otlp',
     OTEL_METRICS_EXPORTER: 'otlp',
     OTEL_TRACES_EXPORTER: 'otlp',
+    OTEL_LOG_TOOL_DETAILS: '1',
   };
 
   const existingEnv = existing.env ?? {};
