@@ -48,7 +48,7 @@ import {
   writeCodexDesktopConfig,
 } from './connectors/codex-desktop.js';
 import { writeCursorIdeHooksConfig } from './connectors/cursor-ide.js';
-import { writeClaudeCodeAnalyticsConfig } from './connectors/claude-code-analytics.js';
+import { writeClaudeCodeAnalyticsConfig } from './connectors/claude-code-analytics/claude-code-analytics.js';
 
 export const DEFAULT_DAEMON_PORT = 4001;
 
