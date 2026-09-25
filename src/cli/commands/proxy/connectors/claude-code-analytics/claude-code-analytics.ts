@@ -12,13 +12,14 @@
 import { existsSync } from 'node:fs';
 import { copyFile, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ConfigurationError } from '@/utils/errors.js';
 import { logger } from '@/utils/logger.js';
 import { sanitizeLogArgs } from '@/utils/security.js';
 import { resolveProjectRoot } from '@/utils/project-root.js';
 import { resolveHomeDir } from '@/utils/paths.js';
-import { readState } from '../daemon-manager.js';
-import { writeAtomically } from './vscode.js';
+import { readState } from '../../daemon-manager.js';
+import { writeAtomically } from '../vscode.js';
 
 const CODEMIE_COMMAND_MARKER = 'hook --agent claude --analytics';
 const SETTINGS_BACKUP_SUFFIX = '.codemie-backup';
@@ -213,6 +214,12 @@ export async function writeClaudeCodeAnalyticsConfig(
     };
     hooks[eventName] = [...foreignEntries, codemieEntry];
   }
+
+  const authCheckPath = fileURLToPath(new URL('./hooks/auth-check.js', import.meta.url));
+  hooks["UserPromptSubmit"].push({
+    matcher: '',
+    hooks: [{ type: 'command', command: `node ${authCheckPath}` }],
+  });
 
   // Merge env block
   const mergedEnv: Record<string, string> = { ...(existing.env ?? {}), ...codemieEnv };
