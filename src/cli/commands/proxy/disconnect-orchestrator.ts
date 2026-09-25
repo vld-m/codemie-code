@@ -11,7 +11,7 @@ import { sanitizeLogArgs } from '@/utils/security.js';
 
 import { removeCodexDesktopConfig } from './connectors/codex-desktop.js';
 import { removeCursorIdeHooksConfig } from './connectors/cursor-ide.js';
-import { removeClaudeCodeAnalyticsConfig } from './connectors/claude-code-analytics.js';
+import { removeClaudeCodeAnalyticsConfig } from './connectors/claude-code-analytics/claude-code-analytics.js';
 
 export interface DisconnectTargets {
   claudeCode?: boolean;
